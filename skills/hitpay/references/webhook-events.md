@@ -6,9 +6,166 @@ HitPay sends webhooks to notify your server about payment events. Always verify 
 
 **Important:** Never trust redirect URLs alone. Always use webhooks to confirm payment status before fulfilling orders.
 
+## Two Types of Webhooks
+
+HitPay uses two different webhook formats:
+
+| Type | Format | Trigger | Signature |
+|------|--------|---------|-----------|
+| **Vendor Webhook** | Form-encoded | Per payment request (via `webhook` param) | `hmac` field in body |
+| **Event Webhook** | JSON | Dashboard settings (global) | `Hitpay-Signature` header |
+
+**Most developers use Vendor Webhooks** - they're sent when you include a `webhook` URL in your payment request.
+
 ---
 
-## Webhook Headers
+## Vendor Webhook (Form-Encoded)
+
+This is the most common webhook format. Sent as `application/x-www-form-urlencoded` POST with an `hmac` field for verification.
+
+### Payload Fields
+
+| Field | Description |
+|-------|-------------|
+| `payment_id` | Unique payment ID |
+| `payment_request_id` | Your payment request ID |
+| `phone` | Customer phone (may be empty) |
+| `amount` | Payment amount (e.g., "100.00") |
+| `currency` | Currency code (e.g., "SGD") |
+| `status` | `completed`, `failed`, `pending` |
+| `reference_number` | Your order reference (may be empty) |
+| `hmac` | HMAC-SHA256 signature |
+
+### Example Payload
+
+```
+payment_id=9e2d6dc0-dd6d-4443-95a2-b68b3a1eef2f
+&payment_request_id=9e2d6dab-53d6-4f83-baf0-8f3d69e58baa
+&phone=
+&amount=100.00
+&currency=SGD
+&status=completed
+&reference_number=ORDER-12345
+&hmac=7e8c948dd7037b4ec5013a5224886c0bced6ea06f5ad4842db0c89552ab2cc7c
+```
+
+### HMAC Signature Calculation
+
+**Algorithm:** HMAC-SHA256
+**Secret:** Your salt from HitPay dashboard (Settings → API Keys)
+
+**Steps:**
+1. Remove the `hmac` field from the data
+2. Sort remaining fields alphabetically by key
+3. Concatenate as `key1value1key2value2...` (no separators)
+4. Compute HMAC-SHA256 with your salt
+5. Compare with received `hmac` using constant-time comparison
+
+### PHP Validation
+
+```php
+function validateVendorWebhook($salt, $data) {
+    // Extract and remove hmac
+    $receivedHmac = $data['hmac'] ?? '';
+    unset($data['hmac']);
+
+    // Sort keys alphabetically
+    ksort($data);
+
+    // Build signature string: key1value1key2value2...
+    $signatureString = '';
+    foreach ($data as $key => $value) {
+        $signatureString .= $key . $value;
+    }
+
+    // Calculate expected HMAC
+    $calculatedHmac = hash_hmac('sha256', $signatureString, $salt);
+
+    // Constant-time comparison
+    return hash_equals($calculatedHmac, $receivedHmac);
+}
+
+// Usage
+$data = $_POST;
+if (!validateVendorWebhook($salt, $data)) {
+    http_response_code(401);
+    exit('Invalid signature');
+}
+
+// Process payment
+if ($data['status'] === 'completed') {
+    // Mark order as paid
+}
+
+http_response_code(200);
+echo json_encode(['received' => true]);
+```
+
+### Node.js Validation
+
+```javascript
+const crypto = require('crypto');
+
+function validateVendorWebhook(salt, data) {
+    const { hmac, ...rest } = data;
+
+    // Sort keys and build signature string
+    const signatureString = Object.keys(rest)
+        .sort()
+        .map(key => `${key}${rest[key]}`)
+        .join('');
+
+    const calculatedHmac = crypto
+        .createHmac('sha256', salt)
+        .update(signatureString, 'utf-8')
+        .digest('hex');
+
+    return crypto.timingSafeEqual(
+        Buffer.from(calculatedHmac),
+        Buffer.from(hmac || '')
+    );
+}
+```
+
+### Express.js Middleware
+
+```javascript
+// Use urlencoded parser for vendor webhooks
+app.post('/webhook/hitpay',
+    express.urlencoded({ extended: true }),
+    (req, res) => {
+        if (!validateVendorWebhook(process.env.HITPAY_SALT, req.body)) {
+            return res.status(401).json({ error: 'Invalid signature' });
+        }
+
+        const { payment_id, status, reference_number } = req.body;
+
+        if (status === 'completed') {
+            // Update order status
+        }
+
+        res.json({ received: true });
+    }
+);
+```
+
+### Common HMAC Validation Issues
+
+| Issue | Solution |
+|-------|----------|
+| Using SHA1 instead of SHA256 | Always use `sha256` |
+| Not sorting keys alphabetically | Use `ksort()` in PHP or `Object.keys().sort()` in JS |
+| Excluding empty fields | Include ALL fields, even if empty |
+| Using API key instead of salt | Salt is separate from API key |
+| Not removing `hmac` before calculation | Must remove `hmac` field first |
+
+---
+
+## Event Webhook (JSON)
+
+Event webhooks are sent based on your dashboard settings. They use JSON format with signature in the header.
+
+### Webhook Headers
 
 | Header | Description |
 |--------|-------------|

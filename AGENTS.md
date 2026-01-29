@@ -23,20 +23,76 @@ Integrate HitPay payment gateway for online payments in Next.js and JavaScript/T
 **Capabilities:**
 - Payment request creation (redirect and embedded QR flows)
 - Frontend options: redirect checkout, embedded QR, payment method selector
-- Webhook handling with signature verification
+- Webhook handling with signature verification (vendor + event webhooks)
 - Refunds API (full and partial)
+- Common errors troubleshooting
+- Sandbox testing guide
+
+---
+
+### hitpay-php
+
+Integrate HitPay payment gateway using PHP and cURL. No SDK dependencies required.
+
+**Triggers:**
+- "HitPay PHP"
+- "HitPay Laravel"
+- "HitPay cURL"
+- "PHP payment integration"
+- "PHP webhook validation"
+
+**Capabilities:**
+- Pure cURL implementation (works without SDK)
+- Payment request creation with payment_methods array
+- Vendor webhook HMAC-SHA256 validation
+- Laravel service class pattern
+- Laravel webhook controller with CSRF exception
+- Payment status checking
+- Refund API
+- Common PHP errors and solutions
+
+---
+
+### hitpay-dropin
+
+Integrate HitPay Drop-in UI for embedded payment checkout modals.
+
+**Triggers:**
+- "HitPay drop-in"
+- "HitPay popup"
+- "HitPay modal"
+- "embedded checkout"
+- "HitPay iframe"
+
+**Capabilities:**
+- Drop-in UI setup guide
+- React integration component
+- Vue integration component
+- Vanilla JavaScript implementation
+- Configuration options
+- Common issues (methods not showing, DOKU limitations)
+- Security best practices
+
+---
 
 ## Skill Structure
 
 ```
-skills/hitpay/
-├── SKILL.md                     # Main skill instructions
-├── references/
-│   ├── payment-request-api.md   # Full API reference
-│   ├── webhook-events.md        # Webhook handling guide
-│   └── refunds.md               # Refunds API reference
-└── scripts/
-    └── verify-webhook.sh        # Code samples for webhook verification
+skills/
+├── hitpay/
+│   ├── SKILL.md                     # Main skill instructions (Next.js/TS)
+│   └── references/
+│       ├── payment-request-api.md   # Full API reference
+│       ├── webhook-events.md        # Webhook handling (vendor + event)
+│       ├── refunds.md               # Refunds API reference
+│       ├── common-errors.md         # Troubleshooting guide
+│       └── sandbox-testing.md       # Testing guide
+│
+├── hitpay-php/
+│   └── SKILL.md                     # PHP/Laravel integration
+│
+└── hitpay-dropin/
+    └── SKILL.md                     # Drop-in UI guide
 ```
 
 ## Installation
