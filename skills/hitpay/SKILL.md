@@ -4,7 +4,7 @@ description: Integrate HitPay payment gateway for online payments in Next.js and
 license: MIT
 metadata:
   author: hitpay
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # HitPay Integration
@@ -67,6 +67,53 @@ const headers = {
 
 Get API keys from Settings → Payment Gateway → API Keys in your HitPay dashboard.
 
+## Sandbox Limitations
+
+> **Important**: Be aware of these sandbox-specific behaviors before testing.
+
+### Localhost URLs Not Supported
+
+HitPay sandbox **rejects localhost URLs** for `redirect_url` and `webhook` fields. You'll get an error like: `"localhost not work for this field"`.
+
+**Solutions for local development:**
+1. **Omit the fields** - Don't include `redirect_url` and `webhook` when testing locally
+2. **Use ngrok** - Run `ngrok http 3000` and use the ngrok URL
+
+```typescript
+// Helper to check for localhost
+const isLocalhost = (url: string) =>
+  url.includes('localhost') || url.includes('127.0.0.1');
+
+const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+
+// Only include URLs if not localhost
+const payload = {
+  amount,
+  currency,
+  payment_methods: ['card'],
+  reference_number: orderId,
+  ...(isLocalhost(appUrl) ? {} : {
+    redirect_url: `${appUrl}/payment/complete`,
+    webhook: `${appUrl}/api/webhooks/hitpay`,
+  }),
+};
+```
+
+### QR Code Behavior Differs in Sandbox vs Production
+
+- **Sandbox**: `qr_code_data.qr_code` returns a **URL** to a demo page (for browser testing)
+- **Production**: Returns **raw QR string** (e.g., PayNow QR data) to render with a QR library
+
+You must handle both cases in your frontend code.
+
+### Payment Method Availability
+
+Not all payment methods are enabled in sandbox. Commonly available:
+- `card` ✅
+- `paynow_online` ✅
+
+Some methods like `grabpay_direct` may not be enabled for your sandbox account. Check your HitPay dashboard for available methods.
+
 ## Frontend Option A: Redirect (Cards)
 
 Best for card payments or when you want HitPay to handle the full checkout UI.
@@ -87,6 +134,9 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   const { amount, currency, orderId } = await request.json();
 
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const isLocalhost = appUrl.includes('localhost') || appUrl.includes('127.0.0.1');
+
   const response = await fetch('https://api.sandbox.hit-pay.com/v1/payment-requests', {
     method: 'POST',
     headers: {
@@ -98,12 +148,20 @@ export async function POST(request: Request) {
       currency,
       payment_methods: ['card'],
       reference_number: orderId,
-      redirect_url: `${process.env.NEXT_PUBLIC_APP_URL}/payment/complete`,
-      webhook: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/hitpay`,
+      // Only include URLs if not localhost (HitPay rejects localhost)
+      ...(isLocalhost ? {} : {
+        redirect_url: `${appUrl}/payment/complete`,
+        webhook: `${appUrl}/api/webhooks/hitpay`,
+      }),
     }),
   });
 
   const data = await response.json();
+
+  if (!response.ok) {
+    return NextResponse.json({ error: data.message || 'Payment request failed' }, { status: 400 });
+  }
+
   return NextResponse.json({ url: data.url, paymentRequestId: data.id });
 }
 ```
@@ -150,6 +208,9 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   const { amount, currency, orderId, paymentMethod } = await request.json();
 
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const isLocalhost = appUrl.includes('localhost') || appUrl.includes('127.0.0.1');
+
   const response = await fetch('https://api.sandbox.hit-pay.com/v1/payment-requests', {
     method: 'POST',
     headers: {
@@ -162,11 +223,19 @@ export async function POST(request: Request) {
       payment_methods: [paymentMethod],
       generate_qr: true,
       reference_number: orderId,
-      webhook: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/hitpay`,
+      // Only include webhook if not localhost
+      ...(isLocalhost ? {} : {
+        webhook: `${appUrl}/api/webhooks/hitpay`,
+      }),
     }),
   });
 
   const data = await response.json();
+
+  if (!response.ok) {
+    return NextResponse.json({ error: data.message || 'Payment request failed' }, { status: 400 });
+  }
+
   return NextResponse.json({
     paymentRequestId: data.id,
     qrCodeData: data.qr_code_data,
@@ -180,11 +249,13 @@ export async function POST(request: Request) {
 // components/QRPayment.tsx
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 
 export function QRPayment({ amount, currency, orderId, paymentMethod }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [demoUrl, setDemoUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const createQR = async () => {
@@ -194,16 +265,52 @@ export function QRPayment({ amount, currency, orderId, paymentMethod }: Props) {
         body: JSON.stringify({ amount, currency, orderId, paymentMethod }),
       });
 
-      const { qrCodeData } = await response.json();
+      const data = await response.json();
 
-      if (canvasRef.current && qrCodeData) {
-        await QRCode.toCanvas(canvasRef.current, qrCodeData, { width: 256 });
+      if (!response.ok) {
+        setError(data.error || 'Failed to create QR code');
+        return;
+      }
+
+      const { qrCodeData } = data;
+
+      if (!qrCodeData) {
+        setError('No QR code data received');
+        return;
+      }
+
+      // Handle different QR data formats
+      const qrString = qrCodeData.qr_code;
+
+      if (typeof qrString === 'string' && qrString.startsWith('http')) {
+        // Sandbox: Returns a URL to demo page - show link to open it
+        setDemoUrl(qrString);
+      } else if (qrString && canvasRef.current) {
+        // Production: Returns raw QR data - render as QR code
+        await QRCode.toCanvas(canvasRef.current, qrString, { width: 256 });
       }
     };
 
     createQR();
   }, [amount, currency, orderId, paymentMethod]);
 
+  if (error) {
+    return <div className="error">{error}</div>;
+  }
+
+  // Sandbox mode: Show link to demo page
+  if (demoUrl) {
+    return (
+      <div>
+        <p>Sandbox Mode - Click to simulate payment:</p>
+        <a href={demoUrl} target="_blank" rel="noopener noreferrer">
+          Open Payment Demo
+        </a>
+      </div>
+    );
+  }
+
+  // Production mode: Show QR code canvas
   return (
     <div>
       <canvas ref={canvasRef} />
@@ -229,8 +336,9 @@ import { QRPayment } from './QRPayment';
 const PAYMENT_METHODS = [
   { id: 'card', label: 'Credit/Debit Card', type: 'redirect' },
   { id: 'paynow_online', label: 'PayNow', type: 'qr' },
-  { id: 'grabpay_direct', label: 'GrabPay', type: 'qr' },
-  { id: 'shopee_pay', label: 'ShopeePay', type: 'qr' },
+  // Add other methods based on your HitPay dashboard availability
+  // { id: 'grabpay_direct', label: 'GrabPay', type: 'qr' },
+  // { id: 'shopee_pay', label: 'ShopeePay', type: 'qr' },
 ];
 
 export function PaymentMethodSelector({ amount, currency, orderId }: Props) {
@@ -377,6 +485,16 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 |--------|--------|--------|-----|
 | Success | 4242 4242 4242 4242 | Any future | Any 3 digits |
 | Declined | 4000 0000 0000 0002 | Any future | Any 3 digits |
+
+## Troubleshooting
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `"localhost not work for this field"` | Localhost URLs rejected by sandbox | Use ngrok or omit `redirect_url`/`webhook` fields |
+| `"payment method unavailable"` | Method not enabled for account | Check HitPay dashboard for enabled methods |
+| QR code not rendering | Sandbox returns URL instead of QR data | Handle URL case separately (see QR component above) |
+| `"Invalid signature"` | Wrong salt or incorrect body parsing | Use raw body text (`request.text()`), not parsed JSON |
+| API key error | Using wrong environment key | Ensure sandbox key for sandbox URL, production key for production |
 
 ## Resources
 
