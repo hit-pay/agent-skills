@@ -26,6 +26,25 @@ Integrate HitPay payment gateway for online payments in Next.js and JavaScript/T
 - Webhook handling with signature verification
 - Refunds API (full and partial)
 
+### hitpay-qr-payments
+
+Operational guide for AI agents collecting QR payments via HitPay MCP tools. NOT for writing integration code.
+
+**Triggers:**
+- "collect PayNow payment"
+- "QR for Indonesia"
+- "accept GrabPay"
+- "which payment methods in Malaysia"
+- "generate QR code for payment"
+- "HitPay QR payment"
+
+**Capabilities:**
+- Provider-currency mapping for 10+ markets (SG, MY, PH, TH, VN, ID, IN, AU, KR, cross-border)
+- Pre-flight account validation via `get_account_status`
+- Correct `payment_methods` + `currency` parameter selection
+- Cross-currency settlement rules (WeChat, Alipay, UPI)
+- Known gaps and alternative recommendations
+
 ## Skill Structure
 
 ```

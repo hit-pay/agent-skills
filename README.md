@@ -33,6 +33,26 @@ Integrate HitPay payment gateway for online payments in Next.js and JavaScript/T
 - PromptPay (Thailand)
 - And more...
 
+### hitpay-qr-payments
+
+Operational guide for AI agents collecting QR payments via HitPay MCP tools.
+
+**Use when:**
+- Collecting payments via QR code using MCP tools
+- Determining which payment methods are available for a specific country
+- Generating QR codes for PayNow, GrabPay, PromptPay, VietQR, QRIS, UPI, etc.
+- Understanding cross-currency settlement (WeChat Pay, Alipay+, UPI)
+
+**Features:**
+- Provider-currency mapping for 10+ markets
+- Pre-flight account validation via `get_account_status`
+- Decision flowchart: country → method → currency → tool call
+- Known gaps and recommended alternatives
+- Cross-currency settlement rules
+
+**Supported Markets:**
+- Singapore, Malaysia, Philippines, Thailand, Vietnam, Indonesia, India, Australia, Korea, cross-border (Chinese tourists)
+
 ## Installation
 
 ```bash

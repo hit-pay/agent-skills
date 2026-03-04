@@ -20,6 +20,8 @@ Reference this skill when:
 - Handling payment webhooks
 - Processing refunds
 
+> **Operating payments via MCP tools?** For provider-currency mapping, pre-flight validation, and QR payment operations, use the **hitpay-qr-payments** skill instead.
+
 ## Step 1: Determine Payment Methods
 
 Ask which payment methods the customer wants to support:
