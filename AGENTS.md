@@ -45,6 +45,26 @@ Operational guide for AI agents collecting QR payments via HitPay MCP tools. NOT
 - Cross-currency settlement rules (WeChat, Alipay, UPI)
 - Known gaps and alternative recommendations
 
+### hitpay-qr-checkout
+
+Generate a visual QR payment page artifact using HitPay MCP tools. Orchestrates create_embedded_qr → React artifact generation.
+
+**Triggers:**
+- "create a QR payment page"
+- "embedded QR checkout"
+- "QR payment page for PayNow"
+- "QRPH payment page"
+- "QR checkout artifact"
+- "build a QR payment UI"
+- "show QR code to collect payment"
+- "QR page for [country] customer"
+
+**Capabilities:**
+- Natural language → payment method + currency resolution
+- Borderless (cross-border) QR detection and FX display
+- Self-contained React artifact with branded QR payment page
+- Countdown timer, QR rendering via CDN, checkout URL fallback
+
 ## Skill Structure
 
 ```
