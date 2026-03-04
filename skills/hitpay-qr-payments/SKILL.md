@@ -104,7 +104,7 @@ These are the exact values to pass in the `payment_methods` parameter:
 
 ## Step 4: Generate the QR Code
 
-Use `create_embedded_qr` for all QR payment collection:
+For simple one-time QR payments, use `create_embedded_qr`:
 
 ```
 Tool: create_embedded_qr
@@ -118,15 +118,60 @@ Parameters:
   reference_number: "ORD-1234"    # optional
 ```
 
-The response includes a `qr_code_data` field (base64 PNG) and a `url` for the checkout page.
+The response includes a `qr_code_data` field and a `url` for the checkout page.
+
+> **QR code format:** In production, `qr_code_data.qr_code` returns a raw payload string (e.g., PayNow EMV payload), not a base64 image. In sandbox, it returns a URL. To display a scannable QR, pass the string to a QR code library (e.g., `qrcode` npm package).
+
+If you need **webhook confirmation**, **redirect after payment**, **multiple payment methods**, or **expiry control**, use `create_payment_request` with `generate_qr: true` instead:
+
+```
+Tool: create_payment_request
+Parameters:
+  amount: 10.00
+  currency: "SGD"
+  payment_methods: ["paynow_online", "grabpay"]
+  generate_qr: true
+  webhook: "https://example.com/webhook"
+  redirect_url: "https://example.com/thank-you"
+  expires_after: "30 minutes"
+```
 
 ### When to Use Which Tool
 
-| Scenario | Tool | Why |
-|----------|------|-----|
-| Collect a one-time QR payment | `create_embedded_qr` | Returns QR image directly |
-| Collect card + QR payment | `create_payment_request` | Returns checkout URL with method selector |
-| Permanent in-store QR | `create_static_qr` | Rare — POS terminals only |
+#### Capability Comparison
+
+| Capability | `create_embedded_qr` | `create_payment_request` + `generate_qr: true` | `create_static_qr` |
+|------------|:--------------------:|:-----------------------------------------------:|:-------------------:|
+| API endpoint | POST /v1/payment-requests | POST /v1/payment-requests | POST /v1/static_qr |
+| Payment methods | **Single only** | **Multiple** (array) | **3 only** (paynow_online, upi_qr, qrph_netbank) |
+| redirect_url | No | Yes | No |
+| webhook | No | Yes | No |
+| allow_repeated_payments | No | Yes | N/A (permanent) |
+| Expiry control | Expires after payment | `expires_after` / `expiry_date` | None (permanent) |
+| Checkout URL | Yes | Yes | No |
+| Customer-entered amount | No (amount required) | No (amount required) | Yes (omit amount) |
+| Device/location tracking | No | No | Yes (`device_id`, `location_id`) |
+| Lifespan | One-time | Configurable | Permanent |
+
+#### Decision Rules
+
+| Scenario | Use This Tool | Why |
+|----------|---------------|-----|
+| Simple one-time QR payment | `create_embedded_qr` | Simplest — one method, returns QR directly |
+| Need webhook or redirect | `create_payment_request` + `generate_qr: true` | Only tool with `webhook` and `redirect_url` |
+| Offer multiple methods (PayNow + GrabPay) | `create_payment_request` + `generate_qr: true` | Accepts `payment_methods` array |
+| Need expiry control | `create_payment_request` + `generate_qr: true` | Has `expires_after` / `expiry_date` |
+| Permanent printed in-store QR | `create_static_qr` | Survives forever, tied to device/location |
+| Customer enters own amount (tips/donations) | `create_static_qr` | Only tool where amount is optional |
+
+> **Common mistake:** Using `create_embedded_qr` when you need webhook confirmation. `create_embedded_qr` has no `webhook` parameter — use `create_payment_request` with `generate_qr: true` instead.
+
+#### Static QR Limitations
+
+- **Only 3 methods:** `paynow_online`, `upi_qr`, `qrph_netbank` — note `upi_qr` (not `upi`)
+- **No checkout URL** — returns a raw QR string (`qr_value`), not a hosted page
+- **No webhook/redirect** — poll `get_payment_request` or check dashboard for status
+- **Permanent** — cannot expire; delete with `delete_static_qr` if no longer needed
 
 ## Pitfalls and Edge Cases
 
@@ -189,7 +234,17 @@ User wants QR payment
   │   │
   │   Yes
   │   │
-  │   ├─ Call create_embedded_qr with correct method + currency
+  │   ├─ Need webhook, redirect, multi-method, or expiry?
+  │   │   │
+  │   │   Yes ──→ create_payment_request with generate_qr: true
+  │   │   │
+  │   │   No
+  │   │   │
+  │   │   ├─ Permanent in-store QR or customer-entered amount?
+  │   │   │   │
+  │   │   │   Yes ──→ create_static_qr (paynow_online / upi_qr / qrph_netbank only)
+  │   │   │   │
+  │   │   │   No ──→ create_embedded_qr (simplest path)
   │   │
   │   └─ Return QR code to user
   │
